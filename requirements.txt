@@ -1,0 +1,8 @@
+# FastAPI & Server dependencies (optional for enterprise ASGI deployment)
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+pydantic>=2.6.0
+
+# Testing & Dev
+pytest>=8.0.0
+requests>=2.31.0

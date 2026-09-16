@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zero-Knowledge Secure File Vault | E2EE Ephemeral Storage</title>
+    <meta name="description" content="End-to-End Encrypted ephemeral file vault with client-side AES-256-GCM, PBKDF2, and self-destructing links. Zero server trust.">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <!-- Top Navigation Bar -->
+    <header class="navbar">
+        <a href="/" class="brand">
+            <div class="brand-icon">🛡️</div>
+            <div class="brand-title">
+                ZeroVault
+                <span class="brand-badge">AES-256-GCM</span>
+            </div>
+        </a>
+        <div class="nav-status">
+            <div class="status-chip">
+                <span class="pulse-dot"></span>
+                <span id="vaultStatusText">Zero-Knowledge Active</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Title -->
+    <section class="hero">
+        <h1>Zero-Knowledge Secure Vault</h1>
+        <p>
+            End-to-end encrypted ephemeral file sharing. Your files are encrypted in your browser before upload. The server stores only blinded ciphertext and <strong>never</strong> sees your keys or plaintext.
+        </p>
+        <div class="trust-badges">
+            <div class="trust-badge"><span>✔</span> Client-Side WebCrypto</div>
+            <div class="trust-badge"><span>✔</span> AES-256-GCM Authenticated</div>
+            <div class="trust-badge"><span>✔</span> Argon2/PBKDF2 100k Iterations</div>
+            <div class="trust-badge"><span>✔</span> Burn-After-Reading Storage</div>
+            <div class="trust-badge"><span>✔</span> RFC 3986 URL Hash Key Isolation</div>
+        </div>
+    </section>
+
+    <!-- Main Content Container -->
+    <main class="main-wrapper">
+
+        <!-- Navigation Tabs -->
+        <nav class="tabs-nav" role="tablist">
+            <button class="tab-btn active" data-tab="uploadTab" id="btnTabUpload">
+                <span>🔒</span> Encrypt & Upload
+            </button>
+            <button class="tab-btn" data-tab="decryptTab" id="btnTabDecrypt">
+                <span>🔓</span> Decrypt & Download
+            </button>
+            <button class="tab-btn" data-tab="auditTab" id="btnTabAudit">
+                <span>🛡️</span> Security & Threat Model
+            </button>
+        </nav>
+
+        <!-- TAB 1: Encrypt & Upload -->
+        <section id="uploadTab" class="tab-content active">
+            <div class="vault-card">
+                <!-- Drag and drop zone -->
+                <div class="drop-zone" id="dropZone">
+                    <div class="drop-icon">📁</div>
+                    <div class="drop-title">Drop your confidential file here</div>
+                    <div class="drop-subtitle">or click to browse from your device (Max 50MB)</div>
+                    <input type="file" id="fileInput" class="file-input">
+                    <div id="filePill" class="selected-file-pill" style="display: none;">
+                        <span id="fileName">file.txt</span>
+                        <span id="fileSize">(0 KB)</span>
+                        <button id="clearFileBtn" style="background: none; border: none; color: var(--text-crimson); cursor: pointer; font-size: 1rem; font-weight: bold; margin-left: 6px;">✕</button>
+                    </div>
+                </div>
+
+                <!-- Settings: Password, Expiration, Burn Limits -->
+                <div class="settings-grid">
+                    <div class="setting-group">
+                        <label class="setting-label" for="passwordInput">
+                            <span>🔑</span> Optional Passphrase Protection
+                        </label>
+                        <input type="password" id="passwordInput" class="form-input" placeholder="Leave empty for auto-generated 256-bit key" autocomplete="new-password">
+                    </div>
+
+                    <div class="setting-group">
+                        <label class="setting-label" for="expirationSelect">
+                            <span>⏱</span> Expiration Lifetime
+                        </label>
+                        <select id="expirationSelect" class="form-select">
+                            <option value="600">10 Minutes</option>
+                            <option value="3600">1 Hour</option>
+                            <option value="86400" selected>24 Hours (1 Day)</option>
+                            <option value="604800">7 Days</option>
+                        </select>
+                    </div>
+
+                    <div class="setting-group">
+                        <label class="setting-label" for="maxDownloadsSelect">
+                            <span>🔥</span> Download Limits
+                        </label>
+                        <select id="maxDownloadsSelect" class="form-select">
+                            <option value="1" selected>1 Download (Burn After Reading)</option>
+                            <option value="5">5 Downloads</option>
+                            <option value="10">10 Downloads</option>
+                            <option value="0">Unlimited (Until Expiration)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="burnNotice" class="burn-banner">
+                    <span>🔥</span>
+                    <strong>Self-Destruct Active:</strong> This file will be permanently shredded from disk immediately after the first successful download.
+                </div>
+
+                <div style="margin-top: 24px;">
+                    <button id="encryptUploadBtn" class="btn-primary" disabled>
+                        <span>🔒 Encrypt & Store in Vault</span>
+                    </button>
+                </div>
+
+                <!-- Client Cryptographic Telemetry -->
+                <div id="uploadTelemetry" class="crypto-telemetry" style="display: none;">
+                    <div class="telemetry-header">
+                        <div class="telemetry-title">⚡ Client-Side Cryptographic Telemetry</div>
+                        <span class="brand-badge">Hardware Accelerated</span>
+                    </div>
+                    <div class="telemetry-grid">
+                        <div class="telemetry-item">
+                            <span class="telemetry-label">Cipher Suite</span>
+                            <span class="telemetry-value mono" style="color: var(--accent-cyan);">AES-256-GCM (Auth Tag 128-bit)</span>
+                        </div>
+                        <div class="telemetry-item">
+                            <span class="telemetry-label">Initialization Vector (IV)</span>
+                            <span id="telemetryIv" class="telemetry-value mono">-</span>
+                        </div>
+                        <div class="telemetry-item">
+                            <span class="telemetry-label">Key Derivation Salt</span>
+                            <span id="telemetrySalt" class="telemetry-value mono">-</span>
+                        </div>
+                        <div class="telemetry-item">
+                            <span class="telemetry-label">Ciphertext Size</span>
+                            <span id="telemetryCiphertextSize" class="telemetry-value mono">-</span>
+                        </div>
+                        <div class="telemetry-item">
+                            <span class="telemetry-label">Client Encryption Time</span>
+                            <span id="telemetryTime" class="telemetry-value mono" style="color: var(--accent-emerald); font-weight: bold;">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Share Link Result Box -->
+                <div id="uploadResult" class="result-panel">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                        <span style="font-size: 1.2rem;">🔒</span>
+                        <h3 style="color: var(--text-emerald); font-size: 1.05rem;">Zero-Knowledge Link Generated</h3>
+                    </div>
+                    <p style="font-size: 0.88rem; color: var(--text-secondary);">
+                        Share this link with your recipient. The decryption key is contained inside the URL hash fragment (<code class="mono" style="color: var(--accent-cyan);">#key=...</code>) and is <strong>never transmitted to the server</strong>.
+                    </p>
+                    <div class="share-link-box">
+                        <input type="text" id="shareLinkInput" class="share-link-input mono" readonly>
+                        <button id="copyLinkBtn" class="btn-copy">Copy Link</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: Decrypt & Download -->
+        <section id="decryptTab" class="tab-content">
+            <div class="vault-card">
+                <h2 style="font-size: 1.3rem; margin-bottom: 16px;">Retrieve & Decrypt Vault File</h2>
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 24px;">
+                    Paste the Zero-Knowledge share link below. Decryption will execute strictly in your browser's memory using the WebCrypto API.
+                </p>
+
+                <div class="setting-group" style="margin-bottom: 18px;">
+                    <label class="setting-label" for="decryptLinkInput">
+                        <span>🔗</span> Vault Share URL (with #key anchor)
+                    </label>
+                    <input type="text" id="decryptLinkInput" class="form-input mono" placeholder="http://localhost:8080/d/3a9f...#key=8f3b...">
+                </div>
+
+                <div class="setting-group" style="margin-bottom: 24px;">
+                    <label class="setting-label" for="decryptPasswordInput">
+                        <span>🔑</span> Passphrase (if the file was protected with one)
+                    </label>
+                    <input type="password" id="decryptPasswordInput" class="form-input" placeholder="Enter passphrase if required" autocomplete="current-password">
+                </div>
+
+                <div id="decryptStatus" style="margin-bottom: 18px; font-size: 0.9rem;"></div>
+
+                <button id="decryptBtn" class="btn-primary">
+                    <span>🔓 Decrypt & Download File</span>
+                </button>
+
+                <!-- Decryption Telemetry -->
+                <div id="decryptTelemetry" class="crypto-telemetry" style="display: none;">
+                    <div class="telemetry-header">
+                        <div class="telemetry-title" style="color: var(--accent-emerald);">✔ Integrity Verified & Decrypted</div>
+                        <span class="brand-badge" style="color: var(--accent-emerald); border-color: rgba(0, 230, 118, 0.3);">Authentication Tag Valid</span>
+                    </div>
+                    <div class="telemetry-grid">
+                        <div class="telemetry-item">
+                            <span class="telemetry-label">Original Filename</span>
+                            <span id="decryptTelemetryFilename" class="telemetry-value mono" style="color: var(--accent-cyan);">-</span>
+                        </div>
+                        <div class="telemetry-item">
+                            <span class="telemetry-label">Decrypted File Size</span>
+                            <span id="decryptTelemetrySize" class="telemetry-value mono">-</span>
+                        </div>
+                        <div class="telemetry-item">
+                            <span class="telemetry-label">Decryption Latency</span>
+                            <span id="decryptTelemetryTime" class="telemetry-value mono" style="color: var(--accent-emerald);">-</span>
+                        </div>
+                        <div class="telemetry-item">
+                            <span class="telemetry-label">Server State</span>
+                            <span id="decryptTelemetryBurned" class="telemetry-value mono" style="color: var(--text-crimson);">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: Security & Threat Model -->
+        <section id="auditTab" class="tab-content">
+            <div class="vault-card">
+                <h2 style="font-size: 1.3rem; margin-bottom: 12px;">Cryptographic Threat Model & Zero-Trust Architecture</h2>
+                <p style="font-size: 0.92rem; color: var(--text-secondary); margin-bottom: 24px;">
+                    How ZeroVault guarantees data privacy, integrity, and confidentiality against untrusted servers and network eavesdroppers:
+                </p>
+
+                <div class="threat-grid">
+                    <div class="threat-card">
+                        <div class="threat-icon">🔒</div>
+                        <div class="threat-title">Client-Side Authenticated Encryption</div>
+                        <div class="threat-desc">
+                            All files and filenames are encrypted using <strong>AES-256-GCM</strong> directly in the browser via native WebCrypto. GCM includes an authenticated tag to immediately detect any MITM tampering or bit-flipping attacks.
+                        </div>
+                    </div>
+
+                    <div class="threat-card">
+                        <div class="threat-icon">🌐</div>
+                        <div class="threat-title">RFC 3986 URL Hash Key Isolation</div>
+                        <div class="threat-desc">
+                            The 256-bit decryption key is placed strictly in the URL fragment (<code class="mono">#key=...</code>). Per HTTP specifications, browsers never transmit fragments to the server in request headers, preserving zero server knowledge.
+                        </div>
+                    </div>
+
+                    <div class="threat-card">
+                        <div class="threat-icon">🔥</div>
+                        <div class="threat-title">Cryptographic Data Shredding</div>
+                        <div class="threat-desc">
+                            When a file reaches its download limit or TTL expiration, the server overwrites the storage blocks with random entropy (<code class="mono">secrets.token_bytes</code>) before unlinking, preventing cold recovery.
+                        </div>
+                    </div>
+
+                    <div class="threat-card">
+                        <div class="threat-icon">🛡️</div>
+                        <div class="threat-title">Blind Server Architecture</div>
+                        <div class="threat-desc">
+                            Even if the server filesystem or database were completely compromised by an attacker, the attacker would gain access only to unkeyed AES-256 ciphertext blobs with 0% plaintext leakage.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Scripts -->
+    <script src="/js/crypto.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>
